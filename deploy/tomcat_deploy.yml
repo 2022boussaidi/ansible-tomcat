@@ -1,0 +1,91 @@
+- name: Deploy Tomcat Server
+  hosts: localhost
+
+  tasks:
+    # Installation de OpenJDK 11
+    - name: Install OpenJDK 11 JDK
+      become: yes
+      apt:
+        name: openjdk-11-jdk
+        state: present
+        update_cache: yes
+
+    # Validation de l'installation de Java
+
+    - name: Validate if Java is available
+      shell: java -version
+
+    # Création du groupe tomcat
+    - name: Create the group
+      become: yes
+      group:
+        name: tomcat
+        state: present
+
+    # Création de l'utilisateur tomcat
+    - name: Create the user
+      become: yes
+      user:
+        name: tomcat
+        state: present
+
+    # Création du répertoire pour Tomcat
+    - name: Create a Directory /opt/tomcat
+      become: yes
+      file:
+        path: /opt/tomcat
+        state: directory
+        mode: '0755'
+        owner: tomcat
+        group: tomcat
+
+    # Téléchargement de Tomcat
+    - name: Download Tomcat 9.0.54 using unarchive
+      become: yes
+      unarchive:
+        src: "https://archive.apache.org/dist/tomcat/tomcat-9/v9.0.54/bin/apache-tomcat-9.0.54.tar.gz"
+        dest: /opt/tomcat
+        remote_src: yes
+        group: tomcat
+        owner: tomcat
+
+    # Déplacement des fichiers extraits
+    - name: Move files from extracted directory to /opt/tomcat
+      become: yes
+      shell: "mv /opt/tomcat/apache-tomcat-9.0.54/* /opt/tomcat/"
+      args:
+        warn: false
+
+    # Suppression du répertoire extrait
+    - name: Remove the apache-tomcat-9.0.54 directory
+      become: yes
+      file:
+        path: /opt/tomcat/apache-tomcat-9.0.54
+        state: absent
+
+    # Déploiement du fichier WAR
+    - name: Deploy the WAR file
+      become: yes
+      copy:
+        src: sample.war
+        dest: /opt/tomcat/webapps/sample.war
+
+    # Configuration de la taille du heap en fonction de l'environnement
+    - name: Configure JVM heap size for DEV or PROD
+      become: yes
+      lineinfile:
+        path: /opt/tomcat/bin/setenv.sh
+        create: yes
+        mode: '0755'
+        line: "export JAVA_OPTS='-Xms{{ heap_size }} -Xmx{{ heap_size }}'"
+      vars:
+        heap_size: "{{ '256m' if env == 'DEV' else '512m' }}"
+      environment:
+        env: DEV  # on peut chnager cette valeur
+
+    # Démarrage de Tomcat
+    - name: Start Tomcat
+      become: yes
+      command:  nohup /opt/tomcat/bin/startup.sh
+      args:
+        chdir: /opt/tomcat/bin
